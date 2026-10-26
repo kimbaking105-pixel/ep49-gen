@@ -29,18 +29,19 @@ jobs:
 
       - name: Generate shards
         run: |
+          set -o pipefail
           START=$((722 + ${{ matrix.chunk }} * 20))
           END=$((START + 20))
           if [ $END -gt 1000 ]; then END=1000; fi
           if [ $START -ge 1000 ]; then echo "nothing to do"; exit 0; fi
           echo "shards $START..$((END-1))"
           for w in 0 1 2 3; do
-            python3 gen.py --engine ./eng_gh --net net_comp_ft_ep49.nnue --out data \
+            python3 -u gen.py --engine ./eng_gh --net net_comp_ft_ep49.nnue --out data \
               --start $START --shards $END --shard-size 10000 --nodes 5000 \
-              --workers 4 --worker $w --status-every 300 > log_w$w.txt 2>&1 &
+              --rand-min 4 --rand-max 12 \
+              --workers 4 --worker $w --status-every 60 2>&1 | sed -u "s/^/[w$w] /" &
           done
           wait
-          tail -n 2 log_w*.txt
 
       - name: Upload shards
         if: always()
