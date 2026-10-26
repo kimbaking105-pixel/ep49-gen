@@ -1,0 +1,52 @@
+name: Generate ep49 positions
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gen:
+    strategy:
+      fail-fast: false
+      max-parallel: 14
+      matrix:
+        chunk: [0,1,2,3,4,5,6,7,8,9,10,11,12,13]
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build engine
+        run: |
+          g++ -O3 -std=c++17 -DNDEBUG -DUCI_TRACE_ENABLED=0 -pthread engine.cpp -o eng_gh
+          chmod +x eng_gh
+          nproc
+
+      - name: Install python deps
+        run: pip install -q numpy chess
+
+      - name: Generate shards
+        run: |
+          START=$((722 + ${{ matrix.chunk }} * 20))
+          END=$((START + 20))
+          if [ $END -gt 1000 ]; then END=1000; fi
+          if [ $START -ge 1000 ]; then echo "nothing to do"; exit 0; fi
+          echo "shards $START..$((END-1))"
+          for w in 0 1 2 3; do
+            python3 gen.py --engine ./eng_gh --net net_comp_ft_ep49.nnue --out data \
+              --start $START --shards $END --shard-size 10000 --nodes 5000 \
+              --workers 4 --worker $w --status-every 300 > log_w$w.txt 2>&1 &
+          done
+          wait
+          tail -n 2 log_w*.txt
+
+      - name: Upload shards
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shards-${{ matrix.chunk }}
+          path: data/
+          retention-days: 14
+          if-no-files-found: ignore
